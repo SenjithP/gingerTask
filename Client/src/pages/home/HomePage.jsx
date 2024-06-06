@@ -1,114 +1,194 @@
-import React, { useEffect, useRef, useState } from "react";
+// HomePage.js
+
+import { useEffect, useRef, useState } from "react";
 import "./HomePage.css";
 import axios from "axios";
 import { io } from "socket.io-client";
 
 const HomePage = () => {
-  const userInfo = JSON.parse(localStorage.getItem("userInfo"));
-  const [chats, setChats] = useState([]);
   const [users, setUsers] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState([]);
-  const [recievedMessage,setRecievedMessage] = useState()
-  const [messages,setMessages] = useState()
-
-
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [chats, setChats] = useState([]);
+  const [currentChat, setCurrentChat] = useState(null);
 
   const socket = useRef();
 
+  const userInfo = JSON.parse(localStorage.getItem("userInfo"));
+
+  const handleChange = (event) => {
+    setNewMessage(event.target.value);
+  };
+
   useEffect(() => {
-    const getAllAvailableUsers = async () => {
+    const fetchAllUsers = async () => {
       try {
-        const responses = await axios.post(
+        const response = await axios.post(
           "http://localhost:8080/api/chat/getAllUsers"
         );
-        setUsers(responses.data);
-      } catch (error) {
-        console.log(error);
-      }
-    };
-    getAllAvailableUsers();
-  }, []);
-
-  useEffect(() => {
-    const getAllChats = async () => {
-      try {
-        const userId = userInfo?.id;
-
-        if (userId) {
-          const response = await axios.get(
-            `http://localhost:8080/api/chat/${userId}`
+        if (response.data.allUsers) {
+          const filteredUsers = response.data.allUsers.filter(
+            (user) => user._id !== userInfo.id
           );
-          setChats(response.data, "chatData");
+          setUsers(filteredUsers);
+        } else {
+          setUsers(["No User Found"]);
         }
       } catch (error) {
-        console.log(error);
+        console.error("Error fetching users:", error);
       }
     };
 
-    getAllChats();
-  }, [userInfo?.id]);
+    fetchAllUsers();
+  }, [userInfo.id]);
 
-  useEffect(() => {
-    socket.current = io("ws://localhost:8080");
-
-    const userId = userInfo?.id;
-
-    if (userId) {
-      socket.current.emit("user-connected", userId);
+  const handleChatClick = async (userId) => {
+    try {
+      const senderId = userInfo.id;
+      const receiverId = userId;
+      const response = await axios.post(
+        "http://localhost:8080/api/chat/generateChat",
+        {
+          senderId,
+          receiverId,
+        }
+      );
+      if (response.data) {
+        console.log(response.data);
+      }
+      const user = users.find((u) => u._id === userId);
+      setSelectedUser(user);
+      const chat = chats.find((item) => item.chatPersons.includes(user._id));
+      if (chat) {
+        setCurrentChat(chat);
+      } else {
+        console.log("Chat not found");
+      }
+      setMessages([]);
+      setNewMessage("");
+    } catch (error) {
+      console.error("Error creating chat:", error);
     }
-
-    socket.current.on("update-user-list", (users) => {
-      setOnlineUsers(users);
-    });
-  }, [userInfo?.id]);
+  };
 
   useEffect(() => {
-    if (sendMessage !== null) {
-      socket.current.emit("", sendMessage);
-    }
-  }, [sendMessage]);
-
-  useEffect(() => {
-    socket.current.on("", (data) => {
-      setRecievedMessage(data);
-    });
-  }, []);
-
-  //getmessage (show)
-  useEffect(() => {
-    const fetchAllMessages = async () => {
+    const getChats = async () => {
       try {
-        const response = await axios.get(chats._id);
+        const userId = userInfo?.id;
+        if (userId) {
+          const { data } = await axios.get(
+            `http://localhost:8080/api/chat/${userId}`
+          );
+          setChats(data);
+        }
+      } catch (error) {
+        console.error("Error fetching chats:", error);
+      }
+    };
+    getChats();
+  }, [userInfo.id]);
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const response = await axios.get(
+          `http://localhost:8080/api/message/${currentChat._id}`
+        );
         setMessages(response.data);
       } catch (error) {
-        console.log(error);
+        console.error("Error fetching messages:", error);
       }
     };
 
-    if (chats !== null) {
-      fetchAllMessages();
-    }
-  }, [chats]);
+    if (currentChat !== null) fetchMessages();
+  }, [currentChat]);
 
-  //addmessage (send)
+  useEffect(() => {
+    socket.current = io("http://localhost:8080");
+
+    return () => {
+      if (socket.current) {
+        socket.current.disconnect();
+      }
+    };
+  }, []);
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+
+    const message = {
+      senderId: userInfo?.id,
+      text: newMessage,
+      chatId: currentChat?._id,
+    };
+
+    const receiverId = currentChat?.chatPersons.find(
+      (id) => id !== userInfo?.id
+    );
+
+    try {
+      // Send message to database
+      const { data } = await axios.post(
+        "http://localhost:8080/api/message/addMessage",
+        message
+      );
+      setMessages([...messages, data]);
+
+      // Send message to socket server
+      socket.current.emit("send-message", { ...message, receiverId });
+
+      setNewMessage("");
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
+  };
+
+  useEffect(() => {
+    socket.current.on("receive-message", (data) => {
+      setMessages([...messages, data]);
+    });
+  }, [messages]);
 
   return (
-    <div className="chat-app">
+    <div className="container">
       <div className="user-list">
         {users.map((user) => (
-          <div className="user" key={user.id}>
-            {user.userName}
+          <div key={user._id} className="user-item">
+            <span>{user.userName}</span>
+            <button onClick={() => handleChatClick(user._id)}>Chat</button>
           </div>
         ))}
       </div>
-      <div className="chat-area">
-        <input
-          value={newMessage}
-          onChange={handleChange}
-          type="text"
-          placeholder="type your messages here"
-        />
-        <button  onClick={handleSend} >send</button>
+      <div className="chat-box">
+        <div className="chat-header">
+          {selectedUser
+            ? `Chat with ${selectedUser.userName}`
+            : "Select a user to chat"}
+        </div>
+        <div className="chat-messages">
+          {messages.map((msg, index) => (
+            <div
+              key={index}
+              className={`chat-message ${
+                msg.senderId === userInfo.id ? "my-message" : "their-message"
+              }`}
+            >
+              {msg.text}
+            </div>
+          ))}
+        </div>
+        {selectedUser && (
+          <div className="chat-input">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={handleChange}
+              placeholder="Type a message"
+            />
+            <button onClick={handleSend}>Send</button>
+          </div>
+        )}
       </div>
     </div>
   );

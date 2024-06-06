@@ -3,53 +3,63 @@ import User from "../Models/UserModel.js";
 
 export const generateChat = async (req, res) => {
   try {
-    const existingPersonsChat = await Chat.findOne({
-      chatPersons: { $all: [req.body.senderId, req.body.recieverId] },
-    });
-    if (existingPersonsChat) {
-      existingPersonsChat.updatedAt = new Date();
-      await existingPersonsChat.save();
+    const { senderId, receiverId } = req.body;
+    if (senderId === receiverId) {
       return res
-        .status(200)
-        .json({ message: "Chat updated", existingPersonsChat });
+        .status(400)
+        .json({ message: "Cannot create chat with oneself" });
+    }
+
+    const existingChat = await Chat.findOne({
+      chatPersons: { $all: [senderId, receiverId] },
+    });
+    if (existingChat) {
+      existingChat.updatedAt = new Date();
+      await existingChat.save();
+      return res.status(200).json({ message: "Chat updated", existingChat });
     } else {
-      const newGeneratedChat = new Chat({
-        chatPersons: [req.body.senderId, req.body.recieverId],
+      const newChat = new Chat({
+        chatPersons: [senderId, receiverId],
       });
-      const created = newGeneratedChat.save();
-      return res.status(200).json({ message: "Chat Created", created });
+      await newChat.save();
+      return res.status(200).json({ message: "Chat created", newChat });
     }
   } catch (error) {
-    console.log("Error:", error);
+    console.error("Error generating chat:", error);
     return res
       .status(500)
-      .json({ message: "Some thing went wrong, Please try again later" });
+      .json({ message: "Something went wrong, please try again later" });
   }
 };
 
 export const userChats = async (req, res) => {
   try {
-    const chat = await Chat.find({
-      chatPersons: { $in: [req.params.userId] },
+    const userId = req.params.userId;
+    const userChats = await Chat.find({
+      chatPersons: { $in: [userId] },
     });
-    res.status(200).json(chat);
+    return res.status(200).json(userChats);
   } catch (error) {
-    console.log("Error:", error);
+    console.error("Error fetching user chats:", error);
     return res
       .status(500)
-      .json({ message: "Some thing went wrong, Please try again later" });
+      .json({ message: "Something went wrong, please try again later" });
   }
 };
 
 export const getAllUsers = async (req, res) => {
   try {
     const allUsers = await User.find({});
-    res.status(200).json(allUsers);
+    if (allUsers) {
+      return res.status(200).json({ message: "All users found", allUsers });
+    } else {
+      return res.status(400).json({ message: "Failed to fetch users" });
+    }
   } catch (error) {
-    console.log("Error:", error);
+    console.error(error);
     return res
       .status(500)
-      .json({ message: "Some thing went wrong, Please try again later" });
+      .json({ message: "Something went wrong, please try again later" });
   }
 };
 
@@ -61,5 +71,8 @@ export const findChat = async (req, res) => {
     res.status(200).json(chat);
   } catch (error) {
     res.status(500).json(error);
+    return res
+      .status(500)
+      .json({ message: "Something went wrong, please try again later" });
   }
 };

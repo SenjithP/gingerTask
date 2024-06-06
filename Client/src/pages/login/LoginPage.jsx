@@ -5,8 +5,8 @@ import "./LoginPage.css";
 import { useNavigate } from "react-router-dom";
 
 const LoginPage = () => {
-  useNavigate;
   const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     userEmail: "",
     userPassword: "",
@@ -60,6 +60,7 @@ const LoginPage = () => {
             </button>
           </form>
         </div>
+        <p2 onClick={() => navigate("/")}>Go to Register</p2>
       </div>
     </>
   );

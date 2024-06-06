@@ -2,8 +2,10 @@ import { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import "./RegisterPage.css";
+import {useNavigate} from "react-router-dom"
 
 const RegisterPage = () => {
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({
     userName: "",
     userEmail: "",
@@ -70,6 +72,7 @@ const RegisterPage = () => {
             </button>
           </form>
         </div>
+        <p2 onClick={() => navigate('/login')}>Go to login</p2>
       </div>
     </>
   );

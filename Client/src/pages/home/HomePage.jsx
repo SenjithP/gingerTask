@@ -1,5 +1,3 @@
-// HomePage.js
-
 import { useEffect, useRef, useState } from "react";
 import "./HomePage.css";
 import axios from "axios";
@@ -13,13 +11,35 @@ const HomePage = () => {
   const [chats, setChats] = useState([]);
   const [currentChat, setCurrentChat] = useState(null);
 
-  const socket = useRef();
+  const socketRef = useRef();
 
   const userInfo = JSON.parse(localStorage.getItem("userInfo"));
 
-  const handleChange = (event) => {
-    setNewMessage(event.target.value);
-  };
+  useEffect(() => {
+    const socket = io("http://localhost:8080");
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      console.log("Socket connected:", socket.id);
+      socket.emit("setup", userInfo);
+
+      if (userInfo) {
+        socket.emit("user-connected", userInfo.id);
+      }
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Socket disconnected");
+    });
+
+    socket.on("message", (message) => {
+      setMessages((prevMessages) => [...prevMessages, message]);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [userInfo]);
 
   useEffect(() => {
     const fetchAllUsers = async () => {
@@ -62,13 +82,25 @@ const HomePage = () => {
       const chat = chats.find((item) => item.chatPersons.includes(user._id));
       if (chat) {
         setCurrentChat(chat);
+        fetchMessagesForChat(chat._id);
       } else {
         console.log("Chat not found");
       }
-      setMessages([]);
-      setNewMessage("");
+      setMessages([]); 
+      setNewMessage(""); 
     } catch (error) {
       console.error("Error creating chat:", error);
+    }
+  };
+
+  const fetchMessagesForChat = async (chatId) => {
+    try {
+      const response = await axios.get(
+        `http://localhost:8080/api/message/${chatId}`
+      );
+      setMessages(response.data);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
     }
   };
 
@@ -89,31 +121,6 @@ const HomePage = () => {
     getChats();
   }, [userInfo.id]);
 
-  useEffect(() => {
-    const fetchMessages = async () => {
-      try {
-        const response = await axios.get(
-          `http://localhost:8080/api/message/${currentChat._id}`
-        );
-        setMessages(response.data);
-      } catch (error) {
-        console.error("Error fetching messages:", error);
-      }
-    };
-
-    if (currentChat !== null) fetchMessages();
-  }, [currentChat]);
-
-  useEffect(() => {
-    socket.current = io("http://localhost:8080");
-
-    return () => {
-      if (socket.current) {
-        socket.current.disconnect();
-      }
-    };
-  }, []);
-
   const handleSend = async (e) => {
     e.preventDefault();
 
@@ -128,15 +135,13 @@ const HomePage = () => {
     );
 
     try {
-      // Send message to database
       const { data } = await axios.post(
         "http://localhost:8080/api/message/addMessage",
         message
       );
-      setMessages([...messages, data]);
+      setMessages((prevMessages) => [...prevMessages, data]);
 
-      // Send message to socket server
-      socket.current.emit("send-message", { ...message, receiverId });
+      socketRef.current.emit("send-message", { ...message, receiverId });
 
       setNewMessage("");
     } catch (error) {
@@ -145,8 +150,8 @@ const HomePage = () => {
   };
 
   useEffect(() => {
-    socket.current.on("receive-message", (data) => {
-      setMessages([...messages, data]);
+    socketRef.current.on("receive-message", (data) => {
+      setMessages((prevMessages) => [...prevMessages, data]);
     });
   }, [messages]);
 
@@ -183,7 +188,7 @@ const HomePage = () => {
             <input
               type="text"
               value={newMessage}
-              onChange={handleChange}
+              onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type a message"
             />
             <button onClick={handleSend}>Send</button>

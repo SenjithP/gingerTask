@@ -17,9 +17,7 @@ export const generateToken = (res, userId) => {
       expiresIn: "30d",
     });
 
-    console.log(token);
-    const result = res.cookie("userjwt", token, COOKIE_CONFIG);
-    console.log(result);
+    res.cookie("userjwt", token, COOKIE_CONFIG);
   } catch (error) {
     console.error("Error:", error);
     return res.status(400).json({ message: "Token generation unsuccessfull" });

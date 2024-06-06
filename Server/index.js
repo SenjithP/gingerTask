@@ -1,4 +1,3 @@
-// server.js
 
 import express from "express";
 import cors from "cors";
@@ -21,17 +20,14 @@ const io = new Server(server, {
   },
 });
 
-// Middleware
 app.use(express.json());
 app.use(cors());
 app.use(cookieParser());
 
-// Routes
 app.use("/api/users", authenticationRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/message", messageRouter);
 
-// MongoDB Connection
 connect()
   .then(() => {
     const port = process.env.PORT || 5000;
@@ -43,14 +39,20 @@ connect()
     console.error("Error connecting to MongoDB:", err);
   });
 
-// Array to store connected users
 let connectedUsers = [];
 
-// Socket.IO events
+const findUserBySocketId = (socketId) => {
+  return connectedUsers.find((user) => user.socketId === socketId);
+};
+
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  // Add user to connectedUsers array when they connect
+  const existingUser = findUserBySocketId(socket.id);
+  if (existingUser) {
+    socket.emit("user-connected", existingUser.userId);
+  }
+
   socket.on("user-connected", (userId) => {
     const existingUserIndex = connectedUsers.findIndex(
       (user) => user.userId === userId
@@ -65,19 +67,16 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Send message to a specific user
   socket.on("send-message", (message) => {
     const { receiverId } = message;
     const recipient = connectedUsers.find((user) => user.userId === receiverId);
     if (recipient) {
       io.to(recipient.socketId).emit("receive-message", message);
     } else {
-      // Handle recipient not found
       socket.emit("recipient-not-found", { receiverId });
     }
   });
 
-  // Remove user from connectedUsers array when they disconnect
   socket.on("disconnect", () => {
     connectedUsers = connectedUsers.filter(
       (user) => user.socketId !== socket.id
